@@ -34,7 +34,7 @@ class CompetitionsRepository {
   Future<List<Map<String, dynamic>>> getScoresForUser(String userId) async {
     final response = await _supabaseClient
         .from('station_scores')
-        .select('*, stations(nombre), station_days(nombre)')
+        .select('*, stations(nombre), station_days(nombre, is_published)')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
         
@@ -77,7 +77,7 @@ class CompetitionsRepository {
     }
 
     // 2. Get all scores
-    var query = _supabaseClient.from('station_scores').select();
+    var query = _supabaseClient.from('station_scores').select('*, station_days!inner(is_published)').eq('station_days.is_published', true);
     if (dayId != null) {
       query = query.eq('station_day_id', dayId);
     }
@@ -132,6 +132,81 @@ class CompetitionsRepository {
   Future<void> deleteStationDay(String id) async {
     await _supabaseClient.from('station_scores').delete().eq('station_day_id', id);
     await _supabaseClient.from('station_days').delete().eq('id', id);
+  }
+
+  Future<void> _autoAssignMinimumScores(String dayId) async {
+    final teamMembersResponse = await _supabaseClient.from('team_members').select('team_id, user_id');
+    final Map<String, String> userToTeam = {};
+    for (var row in teamMembersResponse as List) {
+      userToTeam[row['user_id']] = row['team_id'];
+    }
+
+    final rankings = await getGlobalStandings(dayId: dayId);
+
+    final Map<String, int> teamMinimums = {};
+    final Map<String, List<UserModel>> teamZeros = {};
+
+    for (var ranking in rankings) {
+      final UserModel player = ranking['player'];
+      final int score = ranking['totalScore'];
+      final teamId = userToTeam[player.id];
+
+      if (teamId == null) continue;
+
+      if (score > 0) {
+        final currentMin = teamMinimums[teamId];
+        if (currentMin == null || score < currentMin) {
+          teamMinimums[teamId] = score;
+        }
+      } else {
+        teamZeros.putIfAbsent(teamId, () => []).add(player);
+      }
+    }
+
+    final stationsResponse = await _supabaseClient
+        .from('station_scores')
+        .select('station_id')
+        .eq('station_day_id', dayId)
+        .limit(1);
+        
+    if ((stationsResponse as List).isEmpty) return;
+    
+    final String fallbackStationId = stationsResponse.first['station_id'];
+    final authUserId = _supabaseClient.auth.currentUser?.id;
+
+    for (var teamId in teamZeros.keys) {
+      final minScore = teamMinimums[teamId];
+      if (minScore != null && minScore > 0) {
+        final playersWithZero = teamZeros[teamId]!;
+        for (var player in playersWithZero) {
+          final newScore = StationScoreModel(
+            id: '',
+            userId: player.id,
+            coachId: authUserId,
+            stationId: fallbackStationId,
+            stationDayId: dayId,
+            score: minScore,
+            createdAt: DateTime.now(),
+          );
+          await addScore(newScore);
+        }
+      }
+    }
+  }
+
+  Future<void> toggleStationDayPublish(String id, bool isPublished) async {
+    await _supabaseClient
+        .from('station_days')
+        .update({'is_published': isPublished})
+        .eq('id', id);
+
+    if (isPublished) {
+      try {
+        await _autoAssignMinimumScores(id);
+      } catch (e) {
+        print("Error auto-assigning scores: \$e");
+      }
+    }
   }
 
   Future<void> createStation(String nombre, String? descripcion) async {

@@ -65,7 +65,7 @@ class _SiestaDailyLadderScreenState extends ConsumerState<SiestaDailyLadderScree
                   child: Text('${index + 1}'),
                 ),
                 title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('Toca para ver historial y sumar puntos'),
+                subtitle: Text(isAdminOrCoach ? 'Toca para ver historial y sumar puntos' : 'Toca para ver historial'),
                 trailing: Text(
                   '${participant.puntosLiga} pts',
                   style: TextStyle(

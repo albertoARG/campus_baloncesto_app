@@ -62,11 +62,15 @@ class _AddParticipantDialogState extends ConsumerState<AddParticipantDialog> {
             playersAsync.when(
               data: (players) {
                 return DropdownButtonFormField<String>(
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Jugador', border: OutlineInputBorder()),
                   value: _selectedUserId,
                   items: players.map((p) => DropdownMenuItem(
                     value: p.id,
-                    child: Text('${p.nombre} ${p.apellidos}'),
+                    child: Text(
+                      '${p.nombre} ${p.apellidos}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   )).toList(),
                   onChanged: (val) => setState(() => _selectedUserId = val),
                 );

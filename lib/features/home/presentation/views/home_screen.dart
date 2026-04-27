@@ -3,13 +3,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../tablon/presentation/providers/tablon_providers.dart';
 import '../../../blog/presentation/providers/blog_providers.dart';
+import '../../../../core/services/notification_service.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Refresh the banner data every time we open/return to home
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(tablonPostsProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final userProfileAsync = ref.watch(currentUserProfileProvider);
     final session = Supabase.instance.client.auth.currentSession;
     final String role = session == null
@@ -20,6 +36,16 @@ class HomeScreen extends ConsumerWidget {
     final String userName = session == null
         ? 'Invitado'
         : (userProfileAsync.value?.nombre ?? '');
+
+    // Subscribe/unsubscribe from staff notifications based on role
+    if (session != null && userProfileAsync.value != null) {
+      final notifService = ref.read(notificationServiceProvider);
+      if (canManageScores) {
+        notifService.subscribeToStaffTopic();
+      } else {
+        notifService.unsubscribeFromStaffTopic();
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -34,7 +60,12 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
-      drawer: _AppDrawer(role: role, userName: userName),
+      drawer: _AppDrawer(
+        role: role,
+        userName: userName,
+        isAdmin: isAdmin,
+        canManageScores: canManageScores,
+      ),
       body: _HomeBody(
         canManageScores: canManageScores,
         isAdmin: isAdmin,
@@ -49,7 +80,14 @@ class HomeScreen extends ConsumerWidget {
 class _AppDrawer extends ConsumerWidget {
   final String role;
   final String userName;
-  const _AppDrawer({required this.role, required this.userName});
+  final bool isAdmin;
+  final bool canManageScores;
+  const _AppDrawer({
+    required this.role,
+    required this.userName,
+    required this.isAdmin,
+    required this.canManageScores,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -96,13 +134,19 @@ class _AppDrawer extends ConsumerWidget {
               ],
             ),
           ),
-          _DrawerItem(
-            icon: Icons.home_outlined,
-            label: 'Inicio',
-            onTap: () {
-              Navigator.pop(context);
-              context.go('/');
-            },
+
+          // ─── Sección: Todos ─────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              'GENERAL',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade600,
+                letterSpacing: 1.2,
+              ),
+            ),
           ),
           _DrawerItem(
             icon: Icons.leaderboard_outlined,
@@ -110,6 +154,22 @@ class _AppDrawer extends ConsumerWidget {
             onTap: () {
               Navigator.pop(context);
               context.go('/standings');
+            },
+          ),
+          _DrawerItem(
+            icon: Icons.photo_library_outlined,
+            label: 'Blog',
+            onTap: () {
+              Navigator.pop(context);
+              context.push('/blog');
+            },
+          ),
+          _DrawerItem(
+            icon: Icons.sports_tennis,
+            label: 'Competiciones Siesta',
+            onTap: () {
+              Navigator.pop(context);
+              context.go('/siesta');
             },
           ),
           _DrawerItem(
@@ -121,22 +181,86 @@ class _AppDrawer extends ConsumerWidget {
             },
           ),
           _DrawerItem(
-            icon: Icons.sports_tennis,
-            label: 'Competiciones Siesta',
+            icon: Icons.forum_outlined,
+            label: 'Tablón de Anuncios',
             onTap: () {
               Navigator.pop(context);
-              context.go('/siesta');
+              context.push('/tablon');
             },
           ),
-          if (role == 'admin')
+          _DrawerItem(
+            icon: Icons.person_outline,
+            label: 'Mi Perfil',
+            onTap: () {
+              Navigator.pop(context);
+              isLoggedIn ? context.go('/profile') : context.go('/login');
+            },
+          ),
+
+          // ─── Sección: Solo Staff ────────────────────────────
+          if (canManageScores) ...[
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text(
+                'SOLO STAFF',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
             _DrawerItem(
-              icon: Icons.manage_accounts_outlined,
-              label: 'Gestionar Usuarios',
+              icon: Icons.sports_score,
+              label: 'Puntuar Estación',
+              iconColor: Theme.of(context).colorScheme.primary,
               onTap: () {
                 Navigator.pop(context);
-                context.go('/admin/users');
+                context.push('/add-score');
               },
             ),
+            _DrawerItem(
+              icon: Icons.tune,
+              label: 'Gestión Competición',
+              iconColor: Theme.of(context).colorScheme.primary,
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/competitions/manage');
+              },
+            ),
+            _DrawerItem(
+              icon: Icons.group,
+              label: 'Grupos Competición',
+              iconColor: Theme.of(context).colorScheme.primary,
+              onTap: () {
+                Navigator.pop(context);
+                context.go('/admin/groups');
+              },
+            ),
+            _DrawerItem(
+              icon: Icons.auto_awesome,
+              label: 'Gestión Veladas',
+              iconColor: Theme.of(context).colorScheme.primary,
+              onTap: () {
+                Navigator.pop(context);
+                context.go('/admin/veladas');
+              },
+            ),
+            if (isAdmin)
+              _DrawerItem(
+                icon: Icons.manage_accounts_outlined,
+                label: 'Gestionar Usuarios',
+                iconColor: Theme.of(context).colorScheme.primary,
+                onTap: () {
+                  Navigator.pop(context);
+                  context.go('/admin/users');
+                },
+              ),
+          ],
+
+          // ─── Sección: Sesión ────────────────────────────────
           const Divider(),
           if (isLoggedIn)
             _DrawerItem(
@@ -145,8 +269,32 @@ class _AppDrawer extends ConsumerWidget {
               iconColor: Colors.red,
               onTap: () async {
                 Navigator.pop(context);
-                await ref.read(authRepositoryProvider).signOut();
-                if (context.mounted) context.go('/');
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Cerrar Sesión'),
+                    content: const Text(
+                      '¿Estás seguro de que quieres cerrar sesión?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancelar'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text(
+                          'Cerrar Sesión',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await ref.read(authRepositoryProvider).signOut();
+                  if (context.mounted) context.go('/');
+                }
               },
             )
           else
@@ -203,118 +351,130 @@ class _HomeBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = _buildItems(context);
-    final postsAsync = ref.watch(blogPostsProvider);
+    final postsAsync = ref.watch(tablonPostsProvider);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          Text(
-            'Bienvenido al Campus',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Selecciona una sección para comenzar',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 20),
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(tablonPostsProvider);
+        ref.invalidate(blogPostsProvider);
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              'Bienvenido al Campus',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Selecciona una sección para comenzar',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 20),
 
-          postsAsync.when(
-            data: (posts) {
-              if (posts.isEmpty) return const SizedBox.shrink();
-              final latest = posts.first;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: InkWell(
-                  onTap: () => context.push('/blog'),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.amber.shade700, Colors.orange.shade500],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+            postsAsync.when(
+              data: (posts) {
+                if (posts.isEmpty) return const SizedBox.shrink();
+                final latest = posts.first;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 20.0),
+                  child: InkWell(
+                    onTap: () => context.push('/tablon'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.amber.shade700,
+                            Colors.orange.shade500,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.orange.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.orange.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Colors.white24,
-                            shape: BoxShape.circle,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: Colors.white24,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.campaign,
+                              color: Colors.white,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.campaign,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'ÚLTIMO AVISO',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  latest.isStaffOnly
+                                      ? 'ÚLTIMO AVISO - SOLO STAFF'
+                                      : 'ÚLTIMO AVISO',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                latest.title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                Text(
+                                  latest.title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        const Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
-                      ],
+                          const Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white70,
+                            size: 16,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-          ),
+                );
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
 
-          GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            children: items,
-          ),
-        ],
+            GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: items,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -322,16 +482,22 @@ class _HomeBody extends ConsumerWidget {
   List<Widget> _buildItems(BuildContext context) {
     final all = <_NavCard>[
       _NavCard(
-        label: 'Tablón de Anuncios',
-        icon: Icons.forum,
-        color: const Color(0xFFF57C00),
-        onTap: () => context.push('/blog'),
-      ),
-      _NavCard(
         label: 'Clasificación',
         icon: Icons.leaderboard,
         color: const Color(0xFF1A73E8),
         onTap: () => context.go('/standings'),
+      ),
+      _NavCard(
+        label: 'Blog',
+        icon: Icons.photo_library,
+        color: const Color(0xFFD81B60),
+        onTap: () => context.push('/blog'),
+      ),
+      _NavCard(
+        label: 'Competiciones Siesta',
+        icon: Icons.sports_tennis,
+        color: const Color(0xFF00BFA5),
+        onTap: () => context.go('/siesta'),
       ),
       _NavCard(
         label: 'Clasificación Veladas',
@@ -340,10 +506,10 @@ class _HomeBody extends ConsumerWidget {
         onTap: () => context.go('/veladas'),
       ),
       _NavCard(
-        label: 'Competiciones Siesta',
-        icon: Icons.sports_tennis,
-        color: const Color(0xFF00BFA5),
-        onTap: () => context.go('/siesta'),
+        label: 'Tablón de Anuncios',
+        icon: Icons.forum,
+        color: const Color(0xFFF57C00),
+        onTap: () => context.push('/tablon'),
       ),
       if (canManageScores)
         _NavCard(
@@ -351,6 +517,13 @@ class _HomeBody extends ConsumerWidget {
           icon: Icons.sports_score,
           color: const Color(0xFFFF6B9E),
           onTap: () => context.push('/add-score'),
+        ),
+      if (canManageScores)
+        _NavCard(
+          label: 'Gestión Competición',
+          icon: Icons.tune,
+          color: const Color(0xFF00897B),
+          onTap: () => context.push('/competitions/manage'),
         ),
       if (canManageScores)
         _NavCard(

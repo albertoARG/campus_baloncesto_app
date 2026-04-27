@@ -1,39 +1,36 @@
-class BlogPostModel {
+class TablonPostModel {
   final String id;
   final String title;
   final String content;
   final String authorId;
   final DateTime createdAt;
-  final String imageUrl;
   final String? authorName;
-  final List<String>? imageUrls;
+  final bool isStaffOnly;
 
-  BlogPostModel({
+  TablonPostModel({
     required this.id,
     required this.title,
     required this.content,
     required this.authorId,
     required this.createdAt,
-    required this.imageUrl,
     this.authorName,
-    this.imageUrls,
+    this.isStaffOnly = false,
   });
 
-  factory BlogPostModel.fromJson(Map<String, dynamic> json) {
+  factory TablonPostModel.fromJson(Map<String, dynamic> json) {
     String? name;
     if (json['users'] != null) {
       name = '${json['users']['nombre'] ?? ''} ${json['users']['apellidos'] ?? ''}'.trim();
     }
     
-    return BlogPostModel(
+    return TablonPostModel(
       id: json['id'],
       title: json['title'],
       content: json['content'],
       authorId: json['author_id'],
       createdAt: DateTime.parse(json['created_at']),
-      imageUrl: json['image_url'] ?? '',
       authorName: name,
-      imageUrls: json['image_urls'] != null ? List<String>.from(json['image_urls']) : null,
+      isStaffOnly: json['is_staff_only'] ?? false,
     );
   }
 
@@ -43,8 +40,7 @@ class BlogPostModel {
       'title': title,
       'content': content,
       'author_id': authorId,
-      'image_url': imageUrl,
-      'image_urls': imageUrls,
+      'is_staff_only': isStaffOnly,
     };
   }
 }

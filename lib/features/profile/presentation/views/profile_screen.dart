@@ -1,8 +1,10 @@
 import 'package:campus_baloncesto_app/core/models/user_model.dart';
+import 'package:campus_baloncesto_app/core/services/cloudinary_service.dart';
 import 'package:campus_baloncesto_app/features/auth/presentation/providers/auth_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final bool showLogoutInAppBar;
@@ -14,7 +16,10 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isEditing = false;
+  bool _isUploadingPhoto = false;
   final _formKey = GlobalKey<FormState>();
+  final _imagePicker = ImagePicker();
+  final _cloudinaryService = CloudinaryService();
   
   late TextEditingController _nombreController;
   late TextEditingController _apellidosController;
@@ -48,6 +53,98 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _posicionController.text = user.posicion ?? '';
     _estaturaController.text = user.estatura?.toString() ?? '';
     _edadController.text = user.edad?.toString() ?? '';
+  }
+
+  Future<void> _changeProfilePhoto(String userId) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Text(
+                'Cambiar foto de perfil',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.camera_alt),
+                ),
+                title: const Text('Hacer una foto'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.photo_library),
+                ),
+                title: const Text('Elegir de la galería'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    final pickedFile = await _imagePicker.pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+
+    if (pickedFile == null) return;
+
+    setState(() => _isUploadingPhoto = true);
+
+    try {
+      // Upload to Cloudinary
+      final imageUrl = await _cloudinaryService.uploadImage(pickedFile);
+
+      if (imageUrl == null) {
+        throw Exception('No se pudo subir la imagen');
+      }
+
+      // Save URL in Supabase
+      final supabase = ref.read(supabaseClientProvider);
+      await supabase.from('users').update({
+        'foto_url': imageUrl,
+      }).eq('id', userId);
+
+      // Refresh profile data
+      ref.invalidate(currentUserProfileProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Foto de perfil actualizada')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al subir la foto: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
   }
 
   Future<void> _updateProfile(String userId) async {
@@ -92,7 +189,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Mi Perfil'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
         actions: [
@@ -107,7 +204,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await ref.read(authRepositoryProvider).signOut();
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Cerrar Sesión'),
+                  content: const Text('¿Estás seguro de que quieres cerrar sesión?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancelar'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Cerrar Sesión', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await ref.read(authRepositoryProvider).signOut();
+                if (mounted) context.go('/');
+              }
             },
           ),
         ],
@@ -129,24 +246,68 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ─── Avatar con botón de cambiar foto ───────────
                   Center(
-                    child: CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                      backgroundImage: user.fotoUrl != null ? NetworkImage(user.fotoUrl!) : null,
-                      child: user.fotoUrl == null 
-                        ? Icon(Icons.person, size: 50, color: Theme.of(context).colorScheme.primary)
-                        : null,
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 55,
+                          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                          backgroundImage: user.fotoUrl != null ? NetworkImage(user.fotoUrl!) : null,
+                          child: _isUploadingPhoto
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : user.fotoUrl == null 
+                              ? Icon(Icons.person, size: 55, color: Theme.of(context).colorScheme.primary)
+                              : null,
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: GestureDetector(
+                            onTap: _isUploadingPhoto ? null : () => _changeProfilePhoto(user.id),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Center(
                     child: Text(
-                      user.role.toUpperCase(),
-                      style: TextStyle(
+                      '${user.nombre} ${user.apellidos}',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.secondary,
-                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        user.role.toUpperCase(),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                          letterSpacing: 1.5,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ),

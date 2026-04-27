@@ -7,7 +7,7 @@ final blogRepositoryProvider = Provider<BlogRepository>((ref) {
   return BlogRepository(ref.watch(supabaseClientProvider));
 });
 
-final blogPostsProvider = FutureProvider<List<BlogPostModel>>((ref) async {
+final blogPostsProvider = FutureProvider.autoDispose<List<BlogPostModel>>((ref) async {
   final repo = ref.watch(blogRepositoryProvider);
   return repo.getPosts();
 });

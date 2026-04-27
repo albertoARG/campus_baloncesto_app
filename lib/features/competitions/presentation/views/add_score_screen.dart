@@ -101,7 +101,7 @@ class _AddScoreScreenState extends ConsumerState<AddScoreScreen> {
       appBar: AppBar(
         title: const Text('Registrar Puntuación'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
       ),

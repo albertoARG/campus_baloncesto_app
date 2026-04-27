@@ -2,20 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../providers/blog_providers.dart';
+import '../providers/tablon_providers.dart';
+import '../../../../core/services/notification_service.dart';
 
-class CreatePostScreen extends ConsumerStatefulWidget {
-  const CreatePostScreen({super.key});
+class CreateTablonPostScreen extends ConsumerStatefulWidget {
+  const CreateTablonPostScreen({super.key});
 
   @override
-  ConsumerState<CreatePostScreen> createState() => _CreatePostScreenState();
+  ConsumerState<CreateTablonPostScreen> createState() => _CreateTablonPostScreenState();
 }
 
-class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
+class _CreateTablonPostScreenState extends ConsumerState<CreateTablonPostScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   bool _isLoading = false;
+  bool _isStaffOnly = false;
 
   @override
   void dispose() {
@@ -32,13 +34,21 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception('No autenticado');
       
-      await ref.read(blogRepositoryProvider).createPost(
+      await ref.read(tablonRepositoryProvider).createPost(
         _titleController.text.trim(), 
         _contentController.text.trim(), 
-        user.id
+        user.id,
+        isStaffOnly: _isStaffOnly,
       );
       
-      ref.invalidate(blogPostsProvider);
+      // Send push notification to all relevant devices
+      await ref.read(notificationServiceProvider).sendNotificationToTopic(
+        title: _isStaffOnly ? '📋 Aviso Staff' : '📢 Nuevo Aviso',
+        body: _titleController.text.trim(),
+        isStaffOnly: _isStaffOnly,
+      );
+      
+      ref.invalidate(tablonPostsProvider);
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aviso publicado')));
@@ -79,6 +89,18 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                   textAlignVertical: TextAlignVertical.top,
                   validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
                 ),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text('Solo para Staff (Admins/Entrenadores)'),
+                subtitle: const Text('Este aviso no será visible para alumnos ni familias'),
+                value: _isStaffOnly,
+                activeThumbColor: Colors.orange,
+                onChanged: (val) {
+                  setState(() {
+                    _isStaffOnly = val;
+                  });
+                },
               ),
               const SizedBox(height: 16),
               SizedBox(

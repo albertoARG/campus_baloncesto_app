@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internet permission (required for Supabase, Firebase, Cloudinary) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    
+    <!-- Storage permissions for saving Excel files to Downloads (Android 9 and below) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <application
         android:label="campus_baloncesto_app"
         android:name="${applicationName}"

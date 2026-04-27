@@ -53,7 +53,7 @@ class VeladasManagementScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Gestión de Veladas'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
       ),

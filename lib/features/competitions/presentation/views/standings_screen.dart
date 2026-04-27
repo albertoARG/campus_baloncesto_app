@@ -5,6 +5,7 @@ import '../../../../core/models/user_model.dart';
 import '../providers/competitions_providers.dart';
 import '../../../groups/presentation/providers/groups_providers.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../data/services/export_service.dart';
 
 class StandingsScreen extends ConsumerWidget {
   const StandingsScreen({super.key});
@@ -24,14 +25,47 @@ class StandingsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Clasificación'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
         actions: [
-          if (isAdminOrCoach) IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/competitions/manage'),
-          ),
+          if (isAdminOrCoach) ...[
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'Exportar Clasificación a Excel',
+              onPressed: () async {
+                try {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Generando Excel, esto puede tardar unos segundos...',
+                      ),
+                    ),
+                  );
+                  final msg = await ref
+                      .read(exportServiceProvider)
+                      .exportStandingsToExcel();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(msg),
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted)
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al exportar: \$e')),
+                    );
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () => context.push('/competitions/manage'),
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.refresh(globalStandingsProvider),
@@ -46,7 +80,13 @@ class StandingsScreen extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    const SizedBox(width: 60, child: Text('Grupo: ', style: TextStyle(fontWeight: FontWeight.bold))),
+                    const SizedBox(
+                      width: 60,
+                      child: Text(
+                        'Grupo: ',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: groupsAsync.when(
@@ -56,11 +96,21 @@ class StandingsScreen extends ConsumerWidget {
                             value: selectedGroupId,
                             hint: const Text('Todos los jugadores'),
                             items: [
-                              const DropdownMenuItem(value: null, child: Text('Todos los jugadores')),
-                              ...groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.nombre))),
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text('Todos los jugadores'),
+                              ),
+                              ...groups.map(
+                                (g) => DropdownMenuItem(
+                                  value: g.id,
+                                  child: Text(g.nombre),
+                                ),
+                              ),
                             ],
                             onChanged: (newVal) {
-                              ref.read(selectedGroupIdProvider.notifier).setGroup(newVal);
+                              ref
+                                  .read(selectedGroupIdProvider.notifier)
+                                  .setGroup(newVal);
                             },
                           );
                         },
@@ -72,7 +122,13 @@ class StandingsScreen extends ConsumerWidget {
                 ),
                 Row(
                   children: [
-                    const SizedBox(width: 60, child: Text('Día: ', style: TextStyle(fontWeight: FontWeight.bold))),
+                    const SizedBox(
+                      width: 60,
+                      child: Text(
+                        'Día: ',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: daysAsync.when(
@@ -82,11 +138,21 @@ class StandingsScreen extends ConsumerWidget {
                             value: selectedDayId,
                             hint: const Text('Todos los días'),
                             items: [
-                              const DropdownMenuItem(value: null, child: Text('Todos los días')),
-                              ...days.map((d) => DropdownMenuItem(value: d.id, child: Text(d.nombre))),
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text('Todos los días'),
+                              ),
+                              ...days.map(
+                                (d) => DropdownMenuItem(
+                                  value: d.id,
+                                  child: Text(d.nombre),
+                                ),
+                              ),
                             ],
                             onChanged: (newVal) {
-                              ref.read(selectedDayIdProvider.notifier).setDay(newVal);
+                              ref
+                                  .read(selectedDayIdProvider.notifier)
+                                  .setDay(newVal);
                             },
                           );
                         },
@@ -104,7 +170,9 @@ class StandingsScreen extends ConsumerWidget {
       body: standingsAsync.when(
         data: (rankings) {
           if (rankings.isEmpty) {
-            return const Center(child: Text('Aún no hay puntuaciones registradas.'));
+            return const Center(
+              child: Text('Aún no hay puntuaciones registradas.'),
+            );
           }
 
           return ListView.builder(
@@ -116,34 +184,61 @@ class StandingsScreen extends ConsumerWidget {
 
               // Medal colors for top 3
               Color? iconColor;
-              if (index == 0) iconColor = Colors.amber; // Gold
-              else if (index == 1) iconColor = Colors.grey[400]; // Silver
-              else if (index == 2) iconColor = Colors.brown[300]; // Bronze
+              if (index == 0)
+                iconColor = Colors.amber; // Gold
+              else if (index == 1)
+                iconColor = Colors.grey[400]; // Silver
+              else if (index == 2)
+                iconColor = Colors.brown[300]; // Bronze
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 elevation: index < 3 ? 4 : 1,
                 child: InkWell(
-                  onTap: () {
+                  onTap: isAdminOrCoach ? () {
                     context.push(
                       '/competitions/user/${player.id}',
-                      extra: '${player.nombre} ${player.apellidos}'
+                      extra: '${player.nombre} ${player.apellidos}',
                     );
-                  },
+                  } : null,
                   borderRadius: BorderRadius.circular(12),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: iconColor ?? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                      backgroundColor:
+                          iconColor ??
+                          Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.1),
                       child: Text(
                         '${index + 1}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: index < 3 ? Colors.white : Theme.of(context).colorScheme.primary,
+                          color: index < 3
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ),
-                    title: Text('${player.nombre} ${player.apellidos}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(player.posicion ?? 'Jugador'),
+                    title: Text(
+                      '${player.nombre} ${player.apellidos}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(player.posicion ?? 'Jugador'),
+                        if (isAdminOrCoach) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Toca para ver historial',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                     trailing: Text(
                       '$totalScore pts',
                       style: TextStyle(

@@ -14,7 +14,7 @@ class UserManagementScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Gestionar Usuarios'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
       ),

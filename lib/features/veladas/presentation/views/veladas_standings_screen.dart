@@ -14,7 +14,7 @@ class VeladasStandingsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Clasificación de Veladas'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
         actions: [

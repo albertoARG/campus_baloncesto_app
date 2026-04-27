@@ -61,6 +61,16 @@ class _StationManagementScreenState extends ConsumerState<StationManagementScree
     }
   }
 
+  void _togglePublishDay(String id, bool currentValue) async {
+    try {
+      await ref.read(competitionsRepositoryProvider).toggleStationDayPublish(id, !currentValue);
+      ref.invalidate(stationDaysProvider);
+      ref.invalidate(globalStandingsProvider);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,8 +162,18 @@ class _StationManagementScreenState extends ConsumerState<StationManagementScree
                     child: Icon(Icons.calendar_today, color: Theme.of(context).colorScheme.secondary),
                   ),
                   title: Text(d.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('Fecha real: $f'),
-                  trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.grey), onPressed: () => _deleteDay(d.id)),
+                  subtitle: Text('Fecha real: $f\nEstado: ${d.isPublished ? "Publicado" : "Oculto"}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: d.isPublished,
+                        onChanged: (val) => _togglePublishDay(d.id, d.isPublished),
+                        activeColor: Theme.of(context).colorScheme.primary,
+                      ),
+                      IconButton(icon: const Icon(Icons.delete, color: Colors.grey), onPressed: () => _deleteDay(d.id)),
+                    ],
+                  ),
                 ),
               ),
             );

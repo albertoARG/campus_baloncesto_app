@@ -72,16 +72,9 @@ class GroupManagementScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Grupos de Competición'),
         leading: IconButton(
-          icon: const Icon(Icons.home),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Crear Grupo',
-            onPressed: () => _showCreateGroupDialog(context, ref),
-          ),
-        ],
       ),
       body: groupsAsync.when(
         data: (groups) {
@@ -118,6 +111,11 @@ class GroupManagementScreen extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, s) => Center(child: Text('Error: $e')),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showCreateGroupDialog(context, ref),
+        icon: const Icon(Icons.add),
+        label: const Text('Añadir Grupo'),
       ),
     );
   }
