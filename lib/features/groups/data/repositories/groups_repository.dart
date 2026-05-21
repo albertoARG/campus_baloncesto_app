@@ -60,18 +60,48 @@ class GroupsRepository {
         .eq('user_id', userId);
   }
 
-  // Generar equipos equilibrados automáticamente
+  // Generar equipos equilibrados automáticamente en función de edad, nivel y posición
   Future<void> autoGenerateBalancedTeams(int numTeams, String prefix) async {
     if (numTeams <= 0) return;
 
-    // 1. Fetch players
-    final usersRes = await _supabase.from('users').select().eq('role', 'jugador');
+    // 1. Obtener todos los jugadores (tanto estándar como premium)
+    final usersRes = await _supabase
+        .from('users')
+        .select()
+        .inFilter('role', ['jugador', 'jugador premium']);
+    
     List<UserModel> players = (usersRes as List).map((e) => UserModel.fromJson(e)).toList();
+    if (players.isEmpty) return;
 
-    // 2. Sort players by age descending (older players first)
-    players.sort((a, b) => (b.edad ?? 0).compareTo(a.edad ?? 0));
+    // 2. Agrupar jugadores por categoría táctica/posición para equilibrar el roster
+    List<UserModel> guards = [];   // Bases y Escoltas
+    List<UserModel> centers = [];  // Pívots y Ala-pívots
+    List<UserModel> forwards = []; // Aleros y otros/sin definir
 
-    // 3. Create teams
+    for (var player in players) {
+      final pos = (player.posicion ?? '').toLowerCase();
+      if (pos.contains('base') || pos.contains('escolta') || pos.contains('guard') || pos.contains('point')) {
+        guards.add(player);
+      } else if (pos.contains('pivot') || pos.contains('pívot') || pos.contains('center') || pos.contains('ala-piv') || pos.contains('ala-pív')) {
+        centers.add(player);
+      } else {
+        forwards.add(player);
+      }
+    }
+
+    // Calcular puntuación de fuerza (nivel ponderado y edad como secundario)
+    int getPlayerScore(UserModel p) {
+      final lvl = p.nivel ?? 3; // Nivel por defecto: 3 (intermedio)
+      final age = p.edad ?? 14; // Edad por defecto: 14 años
+      return (lvl * 10) + age;
+    }
+
+    // Ordenar cada grupo de más fuerte a más débil
+    guards.sort((a, b) => getPlayerScore(b).compareTo(getPlayerScore(a)));
+    centers.sort((a, b) => getPlayerScore(b).compareTo(getPlayerScore(a)));
+    forwards.sort((a, b) => getPlayerScore(b).compareTo(getPlayerScore(a)));
+
+    // 3. Crear los nuevos equipos en la base de datos
     List<Map<String, dynamic>> teamsToInsert = [];
     for (int i = 0; i < numTeams; i++) {
       teamsToInsert.add({
@@ -82,32 +112,47 @@ class GroupsRepository {
     final createdTeams = await _supabase.from('teams').insert(teamsToInsert).select();
     final teamIds = (createdTeams as List).map((t) => t['id'] as String).toList();
 
-    // 4. Distribute players using snake draft
+    // 4. Limpiar pertenencias a equipos antiguos de estos jugadores para evitar duplicados
+    final playerIds = players.map((p) => p.id).toList();
+    if (playerIds.isNotEmpty) {
+      await _supabase.from('team_members').delete().inFilter('user_id', playerIds);
+    }
+
+    // Estructura para llevar la fuerza acumulada de cada equipo
+    List<int> teamStrengths = List.filled(numTeams, 0);
     List<Map<String, dynamic>> membersToInsert = [];
-    int currentTeamIdx = 0;
-    bool forward = true;
 
-    for (var player in players) {
-      membersToInsert.add({
-        'team_id': teamIds[currentTeamIdx],
-        'user_id': player.id,
-      });
+    // Distribución equilibrada codiciosa (greedy) por grupo táctico
+    void distributeGroup(List<UserModel> group) {
+      for (var player in group) {
+        // Encontrar el equipo con la menor fuerza acumulada actualmente
+        int weakestTeamIdx = 0;
+        int minStrength = teamStrengths[0];
+        
+        for (int i = 1; i < numTeams; i++) {
+          if (teamStrengths[i] < minStrength) {
+            minStrength = teamStrengths[i];
+            weakestTeamIdx = i;
+          }
+        }
 
-      if (forward) {
-        currentTeamIdx++;
-        if (currentTeamIdx >= numTeams) {
-          currentTeamIdx = numTeams - 1;
-          forward = false;
-        }
-      } else {
-        currentTeamIdx--;
-        if (currentTeamIdx < 0) {
-          currentTeamIdx = 0;
-          forward = true;
-        }
+        // Asignar jugador al equipo más débil
+        membersToInsert.add({
+          'team_id': teamIds[weakestTeamIdx],
+          'user_id': player.id,
+        });
+
+        // Actualizar la fuerza del equipo
+        teamStrengths[weakestTeamIdx] += getPlayerScore(player);
       }
     }
 
+    // Distribuimos primero los pívots, luego las bases, y finalmente los aleros/otros
+    distributeGroup(centers);
+    distributeGroup(guards);
+    distributeGroup(forwards);
+
+    // 5. Insertar los nuevos miembros de equipo
     if (membersToInsert.isNotEmpty) {
       await _supabase.from('team_members').insert(membersToInsert);
     }

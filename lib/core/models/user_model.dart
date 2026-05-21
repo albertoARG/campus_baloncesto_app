@@ -7,6 +7,7 @@ class UserModel {
   final String? posicion;
   final double? estatura;
   final int? edad;
+  final int? nivel;
 
   UserModel({
     required this.id,
@@ -17,6 +18,7 @@ class UserModel {
     this.posicion,
     this.estatura,
     this.edad,
+    this.nivel,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class UserModel {
       posicion: json['posicion'],
       estatura: json['estatura'] != null ? double.parse(json['estatura'].toString()) : null,
       edad: json['edad'] != null ? int.parse(json['edad'].toString()) : null,
+      nivel: json['nivel'] != null ? int.parse(json['nivel'].toString()) : null,
     );
   }
 
@@ -42,6 +45,7 @@ class UserModel {
       'posicion': posicion,
       'estatura': estatura,
       'edad': edad,
+      'nivel': nivel,
     };
   }
 }

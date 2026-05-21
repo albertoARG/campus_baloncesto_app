@@ -26,6 +26,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _posicionController;
   late TextEditingController _estaturaController;
   late TextEditingController _edadController;
+  int? _nivel;
 
   @override
   void initState() {
@@ -53,6 +54,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _posicionController.text = user.posicion ?? '';
     _estaturaController.text = user.estatura?.toString() ?? '';
     _edadController.text = user.edad?.toString() ?? '';
+    _nivel = user.nivel;
   }
 
   Future<void> _changeProfilePhoto(String userId) async {
@@ -158,6 +160,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         'posicion': _posicionController.text.trim().isEmpty ? null : _posicionController.text.trim(),
         'estatura': _estaturaController.text.trim().isEmpty ? null : double.tryParse(_estaturaController.text.trim()),
         'edad': _edadController.text.trim().isEmpty ? null : int.tryParse(_edadController.text.trim()),
+        'nivel': _nivel,
       }).eq('id', userId);
 
       // Refresh the provider so the UI updates
@@ -370,6 +373,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                        }
                        return null;
                     }
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    value: _nivel,
+                    decoration: const InputDecoration(
+                      labelText: 'Nivel de baloncesto',
+                      prefixIcon: Icon(Icons.star_outline),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 1, child: Text('Nivel 1 - Principiante')),
+                      DropdownMenuItem(value: 2, child: Text('Nivel 2 - Intermedio Bajo')),
+                      DropdownMenuItem(value: 3, child: Text('Nivel 3 - Intermedio Alto')),
+                      DropdownMenuItem(value: 4, child: Text('Nivel 4 - Avanzado')),
+                      DropdownMenuItem(value: 5, child: Text('Nivel 5 - Élite')),
+                    ],
+                    onChanged: _isEditing
+                        ? (val) {
+                            setState(() {
+                              _nivel = val;
+                            });
+                          }
+                        : null,
                   ),
                   const SizedBox(height: 32),
                   if (_isEditing)
